@@ -38,11 +38,17 @@ class StopTimeUpdate(Base):
 
     trip_update_id = Column(String, ForeignKey('trip_updates.id'))
 
-def parse_feed(api_key, format):
+def get_json_data(api_key, format):
     url = f'https://api.goswift.ly/real-time/vta/gtfs-rt-trip-updates?apiKey={api_key}&format={format}'
 
     response = requests.get(url)
     data = json.loads(response.text)
+
+    return data
+
+def parse_feed(api_key, format, session):
+    data = get_json_data(api_key, format)
+
     trip_updates = data['entity']
 
     for trip_update in trip_updates:
@@ -70,6 +76,8 @@ def parse_feed(api_key, format):
                 trip_update_id = trip_update_entity.id
             )
 
+            # The arrival and departure times are optional so we need to check if they exist
+
             if 'arrival' in stop_time_update:
                 stop_time_update_entity.arrival_time = stop_time_update['arrival']['time']
 
@@ -89,4 +97,4 @@ if __name__ == '__main__':
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    parse_feed('59af72683221a1734f637eae7a7e8d9b', 'json')
+    parse_feed('59af72683221a1734f637eae7a7e8d9b', 'json', session)
