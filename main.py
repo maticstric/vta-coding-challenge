@@ -3,8 +3,7 @@ import json
 
 from sqlalchemy import create_engine
 from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 
 Base = declarative_base()
 
@@ -46,6 +45,24 @@ def get_json_data(api_key, format):
 
     return data
 
+def add_trip_update_entity(trip_update_entity, session):
+    exists = session.query(TripUpdate.id).filter_by(id=trip_update_entity.id).scalar() is not None
+
+    # According to the instructions, "Existing records within the database
+    # should be skipped, and new ones should be appended."
+
+    if not exists:
+        session.add(trip_update_entity)
+
+def add_stop_time_update_entity(stop_time_update_entity, session):
+    exists = session.query(StopTimeUpdate.id).filter_by(id=stop_time_update_entity.id).scalar() is not None
+
+    # According to the instructions, "Existing records within the database
+    # should be skipped, and new ones should be appended."
+
+    if not exists:
+        session.add(stop_time_update_entity)
+
 def parse_feed(api_key, format, session):
     data = get_json_data(api_key, format)
 
@@ -64,7 +81,7 @@ def parse_feed(api_key, format, session):
             direction_id = trip['directionId']
         )
 
-        # Some trip updates don't have a stopTimeUpdate
+        # stopTimeUpdate is optional so we need to check if it exists
         if 'stopTimeUpdate' not in trip_update['tripUpdate']: continue
 
         for stop_time_update in trip_update['tripUpdate']['stopTimeUpdate']:
@@ -84,9 +101,10 @@ def parse_feed(api_key, format, session):
             if 'departure' in stop_time_update:
                 stop_time_update_entity.departure_time = stop_time_update['departure']['time']
 
-            session.add(stop_time_update_entity)
+            
+            add_stop_time_update_entity(stop_time_update_entity, session)
 
-        session.add(trip_update_entity)
+        add_trip_update_entity(trip_update_entity, session)
 
     session.commit()
 
