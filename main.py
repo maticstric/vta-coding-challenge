@@ -1,41 +1,42 @@
 import requests
 import json
 
-from sqlalchemy import create_engine
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from flask import Flask, jsonify
+from flask_sqlalchemy import SQLAlchemy
 
-Base = declarative_base()
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///gtfs.sqlite'
+db = SQLAlchemy(app)
 
-class TripUpdate(Base):
+class TripUpdate(db.Model):
     __tablename__ = 'trip_updates'
 
-    id = Column(String, primary_key=True)
+    id = db.Column(db.String, primary_key=True)
 
-    trip_id = Column(String)
-    start_time = Column(String)
-    start_date = Column(String)
-    schedule_relationship = Column(String)
-    route_id = Column(String)
-    direction_id = Column(Integer)
+    trip_id = db.Column(db.String)
+    start_time = db.Column(db.String)
+    start_date = db.Column(db.String)
+    schedule_relationship = db.Column(db.String)
+    route_id = db.Column(db.String)
+    direction_id = db.Column(db.Integer)
 
-    stop_time_updates = relationship('StopTimeUpdate', backref='trip_update')
+    stop_time_updates = db.relationship('StopTimeUpdate', backref='trip_update')
 
-class StopTimeUpdate(Base):
+class StopTimeUpdate(db.Model):
     __tablename__ = 'stop_time_updates'
 
     # Custom unique id which is the TripUpdate id concatenated to
     # the stopSequence (with an underscore in between). Something like this
     # is necessary since no unique id is provided in the API.
-    id = Column(String, primary_key=True)
+    id = db.Column(db.String, primary_key=True)
 
-    stop_id = Column(String)
-    stop_sequence = Column(Integer)
-    arrival_time = Column(String)
-    departure_time = Column(String)
-    schedule_relationship = Column(String)
+    stop_id = db.Column(db.String)
+    stop_sequence = db.Column(db.Integer)
+    arrival_time = db.Column(db.String)
+    departure_time = db.Column(db.String)
+    schedule_relationship = db.Column(db.String)
 
-    trip_update_id = Column(String, ForeignKey('trip_updates.id'))
+    trip_update_id = db.Column(db.String, db.ForeignKey('trip_updates.id'))
 
 def get_json_data(api_key, format):
     url = f'https://api.goswift.ly/real-time/vta/gtfs-rt-trip-updates?apiKey={api_key}&format={format}'
@@ -45,26 +46,26 @@ def get_json_data(api_key, format):
 
     return data
 
-def add_trip_update_entity(trip_update_entity, session):
-    exists = session.query(TripUpdate.id).filter_by(id=trip_update_entity.id).scalar() is not None
+def add_trip_update_entity(trip_update_entity):
+    exists = db.session.query(TripUpdate.id).filter_by(id=trip_update_entity.id).scalar() is not None
 
     # According to the instructions, "Existing records within the database
     # should be skipped, and new ones should be appended."
 
     if not exists:
-        session.add(trip_update_entity)
+        db.session.add(trip_update_entity)
 
-def add_stop_time_update_entity(stop_time_update_entity, session):
-    exists = session.query(StopTimeUpdate.id).filter_by(id=stop_time_update_entity.id).scalar() is not None
+def add_stop_time_update_entity(stop_time_update_entity):
+    exists = db.session.query(StopTimeUpdate.id).filter_by(id=stop_time_update_entity.id).scalar() is not None
 
     # According to the instructions, "Existing records within the database
     # should be skipped, and new ones should be appended."
 
     if not exists:
-        session.add(stop_time_update_entity)
+        db.session.add(stop_time_update_entity)
 
-def delete_expired_records(data, session):
-    records = session.query(TripUpdate).all()
+def delete_expired_records(data):
+    records = db.session.query(TripUpdate).all()
 
     for record in records:
         record_expired = True
@@ -74,11 +75,11 @@ def delete_expired_records(data, session):
                 record_expired = False
 
         if record_expired:
-            session.query(TripUpdate).filter(TripUpdate.id==record.id).delete()
+            db.session.query(TripUpdate).filter(TripUpdate.id==record.id).delete()
 
-    session.commit()
+    db.session.commit()
 
-def parse_feed(data, session):
+def parse_feed(data):
     trip_updates = data['entity']
 
     for trip_update in trip_updates:
@@ -114,20 +115,18 @@ def parse_feed(data, session):
                     stop_time_update_entity.departure_time = stop_time_update['departure']['time']
 
                 
-                add_stop_time_update_entity(stop_time_update_entity, session)
+                add_stop_time_update_entity(stop_time_update_entity)
 
-        add_trip_update_entity(trip_update_entity, session)
+        add_trip_update_entity(trip_update_entity)
 
-    session.commit()
+    db.session.commit()
 
 if __name__ == '__main__':
-    engine = create_engine('sqlite:///gtfs.sqlite', echo=True)
-    Base.metadata.create_all(engine)
-
-    Session = sessionmaker(bind=engine)
-    session = Session()
 
     data = get_json_data('59af72683221a1734f637eae7a7e8d9b', 'json')
 
-    delete_expired_records(data, session)
-    parse_feed(data, session)
+    with app.app_context():
+        db.create_all()
+
+        delete_expired_records(data)
+        parse_feed(data)
