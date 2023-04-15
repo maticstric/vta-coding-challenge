@@ -19,8 +19,43 @@ class TripUpdate(db.Model):
     schedule_relationship = db.Column(db.String)
     route_id = db.Column(db.String)
     direction_id = db.Column(db.Integer)
+    timestamp = db.Column(db.String)
+    vehicle_id = db.Column(db.String)
 
     stop_time_updates = db.relationship('StopTimeUpdate', backref='trip_update')
+
+    def dict_format(self):
+        # Converts this object back into the JSON/dict form from the API
+
+        d = {
+                'tripUpdate': {
+                    'trip': {}
+                }
+            }
+
+        d['id'] = self.id
+        d['tripUpdate']['trip']['tripId'] = self.trip_id
+        d['tripUpdate']['trip']['startTime'] = self.start_time
+        d['tripUpdate']['trip']['startDate'] = self.start_date
+        d['tripUpdate']['trip']['scheduleRelationship'] = self.schedule_relationship
+        d['tripUpdate']['trip']['routeId'] = self.route_id
+        d['tripUpdate']['trip']['directionId'] = self.direction_id
+
+        records = db.session.query(StopTimeUpdate).all()
+
+        for record in records:
+            if record.trip_update_id == self.id:
+                if 'stopTimeUpdate' not in d['tripUpdate']:
+                    d['tripUpdate']['stopTimeUpdate'] = []
+
+                d['tripUpdate']['stopTimeUpdate'].append(record.dict_format())
+
+        if self.vehicle_id != None:
+            d['tripUpdate']['vehicle'] = { 'id': self.vehicle_id }
+
+        d['tripUpdate']['timestamp'] = self.timestamp
+
+        return d
 
 class StopTimeUpdate(db.Model):
     __tablename__ = 'stop_time_updates'
@@ -37,6 +72,24 @@ class StopTimeUpdate(db.Model):
     schedule_relationship = db.Column(db.String)
 
     trip_update_id = db.Column(db.String, db.ForeignKey('trip_updates.id'))
+
+    def dict_format(self):
+        # Converts this object back into the JSON/dict form from the API
+
+        d = {}
+
+        d['stopSequence'] = self.stop_sequence
+        d['stopId'] = self.stop_id
+
+        if self.arrival_time:
+            d['arrival'] = { 'time': self.arrival_time }
+
+        if self.departure_time:
+            d['departure'] = { 'time': self.departure_time }
+
+        d['scheduleRelationship'] = self.schedule_relationship
+
+        return d
 
 def get_json_data(api_key, format):
     url = f'https://api.goswift.ly/real-time/vta/gtfs-rt-trip-updates?apiKey={api_key}&format={format}'
@@ -64,6 +117,7 @@ def add_stop_time_update_entity(stop_time_update_entity):
     if not exists:
         db.session.add(stop_time_update_entity)
 
+# TODO Remove the StopTimeUpdates for expired TripUpdates as well
 def delete_expired_records(data):
     records = db.session.query(TripUpdate).all()
 
@@ -92,8 +146,13 @@ def parse_feed(data):
             start_date = trip['startDate'],
             schedule_relationship = trip['scheduleRelationship'],
             route_id = trip['routeId'],
-            direction_id = trip['directionId']
+            direction_id = trip['directionId'],
+            timestamp = trip_update['tripUpdate']['timestamp']
         )
+
+        # vehicle id is optional (for CANCELED) so we need to check if it exists
+        if 'vehicle' in trip_update['tripUpdate']:
+            trip_update_entity.vehicle_id = trip_update['tripUpdate']['vehicle']['id']
 
         # stopTimeUpdate is optional (for CANCELED) so we need to check if it exists
         if 'stopTimeUpdate' in trip_update['tripUpdate']:
@@ -130,3 +189,7 @@ if __name__ == '__main__':
 
         delete_expired_records(data)
         parse_feed(data)
+
+        #trip_updates = db.session.query(TripUpdate).limit(100).all()
+        #result = [tu.dict_format() for tu in trip_updates]
+        #print(jsonify(result).get_data())
