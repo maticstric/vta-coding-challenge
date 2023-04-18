@@ -209,8 +209,13 @@ def parse_feed(data):
 
     db.session.commit()
 
-if __name__ == '__main__':
+@app.route('/real-time/trip-updates')
+def get_trip_updates():
+    trip_updates = db.session.query(TripUpdate).limit(100).all()
+    result = [tu.dict_format() for tu in trip_updates]
+    return jsonify(result)
 
+if __name__ == '__main__':
     data = get_json_data('59af72683221a1734f637eae7a7e8d9b', 'json')
 
     with app.app_context():
@@ -218,7 +223,3 @@ if __name__ == '__main__':
 
         delete_expired_records(data)
         parse_feed(data)
-
-        #trip_updates = db.session.query(TripUpdate).limit(100).all()
-        #result = [tu.dict_format() for tu in trip_updates]
-        #print(jsonify(result).get_data())
