@@ -6,6 +6,8 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///gtfs.sqlite'
+app.config['SQLALCHEMY_ECHO'] = True
+
 db = SQLAlchemy(app)
 
 class TripUpdate(db.Model):
@@ -22,7 +24,7 @@ class TripUpdate(db.Model):
     timestamp = db.Column(db.String)
     vehicle_id = db.Column(db.String)
 
-    stop_time_updates = db.relationship('StopTimeUpdate', backref='trip_update')
+    stop_time_updates = db.relationship('StopTimeUpdate', cascade='all, delete', backref='trip_update')
 
     def dict_format(self):
         # Converts this object back into the JSON/dict form from the API
@@ -117,7 +119,6 @@ def add_stop_time_update_entity(stop_time_update_entity):
     if not exists:
         db.session.add(stop_time_update_entity)
 
-# TODO Remove the StopTimeUpdates for expired TripUpdates as well
 def delete_expired_records(data):
     records = db.session.query(TripUpdate).all()
 
@@ -129,7 +130,8 @@ def delete_expired_records(data):
                 record_expired = False
 
         if record_expired:
-            db.session.query(TripUpdate).filter(TripUpdate.id==record.id).delete()
+            tu = db.session.query(TripUpdate).filter(TripUpdate.id==record.id).first()
+            db.session.delete(tu)
 
     db.session.commit()
 
