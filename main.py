@@ -26,6 +26,16 @@ class TripUpdate(db.Model):
 
     stop_time_updates = db.relationship('StopTimeUpdate', cascade='all, delete', backref='trip_update')
 
+    def update(self, new):
+        self.trip_id = new.trip_id
+        self.start_time = new.start_time
+        self.start_date = new.start_date
+        self.schedule_relationship = new.schedule_relationship
+        self.route_id = new.route_id
+        self.direction_id = new.direction_id
+        self.timestamp = new.timestamp
+        self.vehicle_id = new.vehicle_id
+
     def dict_format(self):
         # Converts this object back into the JSON/dict form from the API
 
@@ -75,6 +85,14 @@ class StopTimeUpdate(db.Model):
 
     trip_update_id = db.Column(db.String, db.ForeignKey('trip_updates.id'))
 
+    def update(self, new):
+        self.stop_id = new.stop_id
+        self.stop_sequence = new.stop_sequence
+        self.arrival_time = new.arrival_time
+        self.departure_time = new.departure_time
+        self.schedule_relationship = new.schedule_relationship
+        self.trip_update_id = new.trip_update_id
+
     def dict_format(self):
         # Converts this object back into the JSON/dict form from the API
 
@@ -105,19 +123,27 @@ def add_trip_update_entity(trip_update_entity):
     exists = db.session.query(TripUpdate.id).filter_by(id=trip_update_entity.id).scalar() is not None
 
     # According to the instructions, "Existing records within the database
-    # should be skipped, and new ones should be appended."
+    # should be skipped [which I believe should say 'updated' according to my
+    # emailed questions], and new ones should be appended."
 
     if not exists:
         db.session.add(trip_update_entity)
+    else:
+        record = db.session.query(TripUpdate).filter_by(id=trip_update_entity.id).first()
+        record.update(trip_update_entity)
 
 def add_stop_time_update_entity(stop_time_update_entity):
     exists = db.session.query(StopTimeUpdate.id).filter_by(id=stop_time_update_entity.id).scalar() is not None
 
     # According to the instructions, "Existing records within the database
-    # should be skipped, and new ones should be appended."
+    # should be skipped [which I believe should say 'updated' according to my
+    # emailed questions], and new ones should be appended."
 
     if not exists:
         db.session.add(stop_time_update_entity)
+    else:
+        record = db.session.query(StopTimeUpdate).filter_by(id=stop_time_update_entity.id).first()
+        record.update(stop_time_update_entity)
 
 def delete_expired_records(data):
     records = db.session.query(TripUpdate).all()
@@ -130,6 +156,7 @@ def delete_expired_records(data):
                 record_expired = False
 
         if record_expired:
+            # Deleting the TripUpdate will also cascade delete the StopTimeUpdates
             tu = db.session.query(TripUpdate).filter(TripUpdate.id==record.id).first()
             db.session.delete(tu)
 
