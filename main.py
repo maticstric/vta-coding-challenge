@@ -5,9 +5,11 @@ from argparse import ArgumentParser
 import requests
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
+import MySQLdb
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///gtfs.sqlite'
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///gtfs.sqlite'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt'
 app.config['SQLALCHEMY_ECHO'] = True
 
 db = SQLAlchemy(app)
@@ -15,16 +17,16 @@ db = SQLAlchemy(app)
 class TripUpdate(db.Model):
     __tablename__ = 'trip_updates'
 
-    id = db.Column(db.String, primary_key=True)
+    id = db.Column(db.String(64), primary_key=True)
 
-    trip_id = db.Column(db.String)
-    start_time = db.Column(db.String)
-    start_date = db.Column(db.String)
-    schedule_relationship = db.Column(db.String)
-    route_id = db.Column(db.String)
+    trip_id = db.Column(db.String(64))
+    start_time = db.Column(db.String(64))
+    start_date = db.Column(db.String(64))
+    schedule_relationship = db.Column(db.String(64))
+    route_id = db.Column(db.String(64))
     direction_id = db.Column(db.Integer)
-    timestamp = db.Column(db.String)
-    vehicle_id = db.Column(db.String)
+    timestamp = db.Column(db.String(64))
+    vehicle_id = db.Column(db.String(64))
 
     stop_time_updates = db.relationship('StopTimeUpdate', cascade='all, delete', backref='trip_update')
 
@@ -77,15 +79,15 @@ class StopTimeUpdate(db.Model):
     # Custom unique id which is the TripUpdate id concatenated to
     # the stopSequence (with an underscore in between). Something like this
     # is necessary since no unique id is provided in the API.
-    id = db.Column(db.String, primary_key=True)
+    id = db.Column(db.String(64), primary_key=True)
 
-    stop_id = db.Column(db.String)
+    stop_id = db.Column(db.String(64))
     stop_sequence = db.Column(db.Integer)
-    arrival_time = db.Column(db.String)
-    departure_time = db.Column(db.String)
-    schedule_relationship = db.Column(db.String)
+    arrival_time = db.Column(db.String(64))
+    departure_time = db.Column(db.String(64))
+    schedule_relationship = db.Column(db.String(64))
 
-    trip_update_id = db.Column(db.String, db.ForeignKey('trip_updates.id'))
+    trip_update_id = db.Column(db.String(64), db.ForeignKey('trip_updates.id'))
 
     def update(self, new):
         self.stop_id = new.stop_id
@@ -189,6 +191,8 @@ def parse_feed(data):
         if 'vehicle' in trip_update['tripUpdate']:
             trip_update_entity.vehicle_id = trip_update['tripUpdate']['vehicle']['id']
 
+        add_trip_update_entity(trip_update_entity)
+
         # stopTimeUpdate is optional (for CANCELED) so we need to check if it exists
         if 'stopTimeUpdate' in trip_update['tripUpdate']:
             for stop_time_update in trip_update['tripUpdate']['stopTimeUpdate']:
@@ -210,8 +214,6 @@ def parse_feed(data):
 
                 
                 add_stop_time_update_entity(stop_time_update_entity)
-
-        add_trip_update_entity(trip_update_entity)
 
     db.session.commit()
 
