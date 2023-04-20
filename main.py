@@ -1,6 +1,8 @@
-import requests
 import json
+import sys
 
+from argparse import ArgumentParser
+import requests
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 
@@ -115,6 +117,10 @@ def get_json_data(api_key, format):
     url = f'https://api.goswift.ly/real-time/vta/gtfs-rt-trip-updates?apiKey={api_key}&format={format}'
 
     response = requests.get(url)
+
+    if response.status_code != 200:
+        sys.exit('Error: Request to API failed. Make sure API key is correct.')
+
     data = json.loads(response.text)
 
     return data
@@ -216,7 +222,18 @@ def get_trip_updates():
     return jsonify(result)
 
 if __name__ == '__main__':
-    data = get_json_data('59af72683221a1734f637eae7a7e8d9b', 'json')
+    parser = ArgumentParser(description='VTA Coding Challenge')
+    parser.add_argument('-f','--format', help='Format (only JSON supported)', default='json')
+    parser.add_argument('-k','--key', help='API key', default='59af72683221a1734f637eae7a7e8d9b')
+    args = vars(parser.parse_args())
+
+    format = args['format'].strip().lower()
+    key = args['key'].strip()
+
+    if format != 'json':
+        sys.exit('Error: Only JSON format supported. Run again with "--format json".')
+
+    data = get_json_data(key, format)
 
     with app.app_context():
         db.create_all()
