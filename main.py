@@ -1,16 +1,17 @@
 import json
 import sys
+import time
 
 from argparse import ArgumentParser
 import requests
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
-import MySQLdb
+from sqlalchemy import Table, Column, Integer, String
 
 app = Flask(__name__)
 #app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///gtfs.sqlite'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt'
-app.config['SQLALCHEMY_ECHO'] = True
+#app.config['SQLALCHEMY_ECHO'] = True
 
 db = SQLAlchemy(app)
 
@@ -29,16 +30,6 @@ class TripUpdate(db.Model):
     vehicle_id = db.Column(db.String(64))
 
     stop_time_updates = db.relationship('StopTimeUpdate', cascade='all, delete', backref='trip_update')
-
-    def update(self, new):
-        self.trip_id = new.trip_id
-        self.start_time = new.start_time
-        self.start_date = new.start_date
-        self.schedule_relationship = new.schedule_relationship
-        self.route_id = new.route_id
-        self.direction_id = new.direction_id
-        self.timestamp = new.timestamp
-        self.vehicle_id = new.vehicle_id
 
     def dict_format(self):
         # Converts this object back into the JSON/dict form from the API
@@ -89,14 +80,6 @@ class StopTimeUpdate(db.Model):
 
     trip_update_id = db.Column(db.String(64), db.ForeignKey('trip_updates.id'))
 
-    def update(self, new):
-        self.stop_id = new.stop_id
-        self.stop_sequence = new.stop_sequence
-        self.arrival_time = new.arrival_time
-        self.departure_time = new.departure_time
-        self.schedule_relationship = new.schedule_relationship
-        self.trip_update_id = new.trip_update_id
-
     def dict_format(self):
         # Converts this object back into the JSON/dict form from the API
 
@@ -127,93 +110,240 @@ def get_json_data(api_key, format):
 
     return data
 
-def add_trip_update_entity(trip_update_entity):
-    exists = db.session.query(TripUpdate.id).filter_by(id=trip_update_entity.id).scalar() is not None
-
-    # According to the instructions, "Existing records within the database
-    # should be skipped [which I believe should say 'updated' according to my
-    # emailed questions], and new ones should be appended."
-
-    if not exists:
-        db.session.add(trip_update_entity)
-    else:
-        record = db.session.query(TripUpdate).filter_by(id=trip_update_entity.id).first()
-        record.update(trip_update_entity)
-
-def add_stop_time_update_entity(stop_time_update_entity):
-    exists = db.session.query(StopTimeUpdate.id).filter_by(id=stop_time_update_entity.id).scalar() is not None
-
-    # According to the instructions, "Existing records within the database
-    # should be skipped [which I believe should say 'updated' according to my
-    # emailed questions], and new ones should be appended."
-
-    if not exists:
-        db.session.add(stop_time_update_entity)
-    else:
-        record = db.session.query(StopTimeUpdate).filter_by(id=stop_time_update_entity.id).first()
-        record.update(stop_time_update_entity)
-
 def delete_expired_records(data):
-    records = db.session.query(TripUpdate).all()
+    new_ids = [ tu['id'] for tu in data['entity'] ]
 
-    for record in records:
-        record_expired = True
+    stmt = StopTimeUpdate.__table__.delete().where(StopTimeUpdate.trip_update_id.not_in(new_ids))
+    db.session.execute(stmt)
 
-        for trip_update in data['entity']:
-            if trip_update['id'] == record.id:
-                record_expired = False
+    stmt = TripUpdate.__table__.delete().where(TripUpdate.id.not_in(new_ids))
+    db.session.execute(stmt)
 
-        if record_expired:
-            # Deleting the TripUpdate will also cascade delete the StopTimeUpdates
-            tu = db.session.query(TripUpdate).filter(TripUpdate.id==record.id).first()
-            db.session.delete(tu)
+    db.session.commit()
+
+def add_new_trip_updates(data, old_ids):
+    to_add = []
+
+    # Reformat the data into a dictonary and make a list of them to add
+    for trip_update in data['entity']:
+        if trip_update['id'] not in old_ids:
+            mapping = {
+                'id': trip_update['id'],
+                'trip_id': trip_update['tripUpdate']['trip']['tripId'],
+                'start_time': trip_update['tripUpdate']['trip']['startTime'],
+                'start_date': trip_update['tripUpdate']['trip']['startDate'],
+                'schedule_relationship': trip_update['tripUpdate']['trip']['scheduleRelationship'],
+                'route_id': trip_update['tripUpdate']['trip']['routeId'],
+                'direction_id': trip_update['tripUpdate']['trip']['directionId'],
+                'timestamp': trip_update['tripUpdate']['timestamp']
+            }
+
+            # vehicle id is optional (for CANCELED) so we need to check if it exists
+            if 'vehicle' in trip_update['tripUpdate']:
+                mapping['vehicle_id'] = trip_update['tripUpdate']['vehicle']['id']
+            else:
+                mapping['vehicle_id'] = None
+
+            to_add.append(mapping)
+
+    # Insert
+    db.session.execute(TripUpdate.__table__.insert().values(to_add))
+    db.session.commit()
+
+def update_trip_updates_table(data, old_ids):
+    # Optimized update idea from here:
+    # https://stackoverflow.com/questions/41870323/sqlalchemy-bulk-update-strategies/41882026#41882026
+
+    # Create a temporary database
+    tmp = Table("tmp", db.metadata,
+        Column("id", String(64), primary_key=True),
+        Column("tripId", String(64)),
+        Column("startTime", String(64)),
+        Column("startDate", String(64)),
+        Column("scheduleRelationship", String(64)),
+        Column("routeId", String(64)),
+        Column("directionId", Integer),
+        Column("timestamp", String(64)),
+        Column("vehicleId", String(64)),
+        prefixes=["TEMPORARY"]
+    )
+
+    tmp.create(bind=db.session.get_bind())
+    db.session.commit()
+
+    to_update = []
+
+    # Reformat the data into a dictonary and make a list of them to update
+    for i, trip_update in enumerate(data['entity']):
+        if trip_update['id'] in old_ids:
+            mapping = {
+                'id': trip_update['id'],
+                'tripId': trip_update['tripUpdate']['trip']['tripId'],
+                'startTime': str(trip_update['tripUpdate']['trip']['startTime']) + 'asdf',
+                'startDate': trip_update['tripUpdate']['trip']['startDate'],
+                'scheduleRelationship': trip_update['tripUpdate']['trip']['scheduleRelationship'],
+                'routeId': trip_update['tripUpdate']['trip']['routeId'],
+                'directionId': trip_update['tripUpdate']['trip']['directionId'],
+                'timestamp': trip_update['tripUpdate']['timestamp']
+            }
+
+            # vehicle id is optional (for CANCELED) so we need to check if it exists
+            if 'vehicle' in trip_update['tripUpdate']:
+                mapping['vehicleId'] = trip_update['tripUpdate']['vehicle']['id']
+            else:
+                mapping['vehicleId'] = None
+
+            to_update.append(mapping)
+
+    # Update the TripUpdate table according to the temporary table
+    if len(to_update) != 0:
+        db.session.execute(tmp.insert().values(to_update))
+
+        db.session.execute(TripUpdate.__table__
+                                     .update()
+                                     .values(
+                                         id=tmp.c.id,
+                                         trip_id=tmp.c.tripId,
+                                         start_time=tmp.c.startTime,
+                                         start_date=tmp.c.startDate,
+                                         schedule_relationship=tmp.c.scheduleRelationship,
+                                         route_id=tmp.c.routeId,
+                                         direction_id=tmp.c.directionId,
+                                         timestamp=tmp.c.timestamp,
+                                         vehicle_id=tmp.c.vehicleId
+                                     )
+                                     .where(TripUpdate.__table__.c.id == tmp.c.id))
+
+    db.session.commit()
+
+def add_new_stop_time_updates(data, old_ids):
+    to_add = []
+
+    # Reformat the data into a dictonary and make a list of them to add
+    for trip_update in data['entity']:
+        if 'stopTimeUpdate' in trip_update['tripUpdate']:
+
+            for stop_time_update in trip_update['tripUpdate']['stopTimeUpdate']:
+                id = f"{trip_update['id']}_{stop_time_update['stopSequence']}"
+
+                if id not in old_ids:
+                    mapping = {
+                        'id': id,
+                        'stop_id': stop_time_update['stopId'],
+                        'stop_sequence': stop_time_update['stopSequence'],
+                        'schedule_relationship': stop_time_update['scheduleRelationship'],
+                        'trip_update_id': trip_update['id']
+                    }
+
+                    # The arrival and departure times are optional (for CANCELED)
+                    # so we need to check if they exist
+
+                    if 'arrival' in stop_time_update:
+                        mapping['arrival_time'] = stop_time_update['arrival']['time']
+                    else:
+                        mapping['arrival_time'] = None
+
+                    if 'departure' in stop_time_update:
+                        mapping['departure_time'] = stop_time_update['departure']['time']
+                    else:
+                        mapping['departure_time'] = None
+
+                    to_add.append(mapping)
+
+    # Insert
+    db.session.execute(StopTimeUpdate.__table__.insert().values(to_add))
+    db.session.commit()
+
+def update_stop_time_updates_table(data, old_ids):
+    # Optimized update idea from here:
+    # https://stackoverflow.com/questions/41870323/sqlalchemy-bulk-update-strategies/41882026#41882026
+
+    # Create a temporary database
+    tmp2 = Table("tmp2", db.metadata,
+        Column("id", String(64), primary_key=True),
+        Column("stopId", String(64)),
+        Column("stopSequence", db.Integer),
+        Column("arrivalTime", String(64)),
+        Column("departureTime", String(64)),
+        Column("scheduleRelationship", String(64)),
+        Column("tripUpdateId", String(64)),
+        prefixes=["TEMPORARY"]
+    )
+
+    tmp2.create(bind=db.session.get_bind())
+    db.session.commit()
+
+    to_update = []
+
+    # Reformat the data into a dictonary and make a list of them to update
+    for trip_update in data['entity']:
+        if 'stopTimeUpdate' in trip_update['tripUpdate']:
+
+            for stop_time_update in trip_update['tripUpdate']['stopTimeUpdate']:
+                id = f"{trip_update['id']}_{stop_time_update['stopSequence']}"
+
+                if id in old_ids:
+                    mapping = {
+                        'id': id,
+                        'stopId': stop_time_update['stopId'],
+                        'stopSequence': stop_time_update['stopSequence'],
+                        'scheduleRelationship': stop_time_update['scheduleRelationship'],
+                        'tripUpdateId': trip_update['id']
+                    }
+
+                    # The arrival and departure times are optional (for CANCELED)
+                    # so we need to check if they exist
+
+                    if 'arrival' in stop_time_update:
+                        mapping['arrivalTime'] = stop_time_update['arrival']['time']
+                    else:
+                        mapping['arrivalTime'] = None
+
+                    if 'departure' in stop_time_update:
+                        mapping['departureTime'] = stop_time_update['departure']['time']
+                    else:
+                        mapping['departureTime'] = None
+
+                    to_update.append(mapping)
+
+    # Update the StopTimeUpdate table according to the temporary table
+    if len(to_update) != 0:
+        db.session.execute(tmp2.insert().values(to_update))
+
+        db.session.execute(StopTimeUpdate.__table__
+                                         .update()
+                                         .values(
+                                             id=tmp2.c.id,
+                                             stop_id=tmp2.c.stopId,
+                                             stop_sequence=tmp2.c.stopSequence,
+                                             schedule_relationship=tmp2.c.scheduleRelationship,
+                                             trip_update_id=tmp2.c.tripUpdateId,
+                                             arrival_time=tmp2.c.arrivalTime,
+                                             departure_time=tmp2.c.departureTime
+                                         )
+                                         .where(StopTimeUpdate.__table__.c.id == tmp2.c.id))
 
     db.session.commit()
 
 def parse_feed(data):
-    trip_updates = data['entity']
+    delete_expired_records(data)
 
-    for trip_update in trip_updates:
-        trip = trip_update['tripUpdate']['trip']
+    old_trip_update_ids = [ v[0] for v in db.session.query(TripUpdate.id).all() ]
+    old_stop_time_update_ids = [ v[0] for v in db.session.query(StopTimeUpdate.id).all() ]
 
-        trip_update_entity = TripUpdate(
-            id = trip_update['id'],
-            trip_id = trip['tripId'],
-            start_time = trip['startTime'],
-            start_date = trip['startDate'],
-            schedule_relationship = trip['scheduleRelationship'],
-            route_id = trip['routeId'],
-            direction_id = trip['directionId'],
-            timestamp = trip_update['tripUpdate']['timestamp']
-        )
 
-        # vehicle id is optional (for CANCELED) so we need to check if it exists
-        if 'vehicle' in trip_update['tripUpdate']:
-            trip_update_entity.vehicle_id = trip_update['tripUpdate']['vehicle']['id']
+    add_new_trip_updates(data, old_trip_update_ids)
+    update_trip_updates_table(data, old_trip_update_ids)
 
-        add_trip_update_entity(trip_update_entity)
+    add_new_stop_time_updates(data, old_stop_time_update_ids)
+    update_stop_time_updates_table(data, old_stop_time_update_ids)
 
-        # stopTimeUpdate is optional (for CANCELED) so we need to check if it exists
-        if 'stopTimeUpdate' in trip_update['tripUpdate']:
-            for stop_time_update in trip_update['tripUpdate']['stopTimeUpdate']:
-                stop_time_update_entity = StopTimeUpdate(
-                    id = f"{trip_update_entity.id}_{stop_time_update['stopSequence']}",
-                    stop_id = stop_time_update['stopId'],
-                    stop_sequence = stop_time_update['stopSequence'],
-                    schedule_relationship = stop_time_update['scheduleRelationship'],
-                    trip_update_id = trip_update_entity.id
-                )
+def clear_database():
+    stmt = StopTimeUpdate.__table__.delete()
+    db.session.execute(stmt)
 
-                # The arrival and departure times are optional so we need to check if they exist
-
-                if 'arrival' in stop_time_update:
-                    stop_time_update_entity.arrival_time = stop_time_update['arrival']['time']
-
-                if 'departure' in stop_time_update:
-                    stop_time_update_entity.departure_time = stop_time_update['departure']['time']
-
-                
-                add_stop_time_update_entity(stop_time_update_entity)
+    stmt = TripUpdate.__table__.delete()
+    db.session.execute(stmt)
 
     db.session.commit()
 
@@ -240,5 +370,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
 
-        delete_expired_records(data)
         parse_feed(data)
