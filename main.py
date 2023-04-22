@@ -7,6 +7,10 @@ import requests
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Table, Column, Integer, String
+from sqlalchemy import create_engine, text
+
+import pymysql
+pymysql.install_as_MySQLdb()
 
 VERBOSITY = 0
 
@@ -363,9 +367,17 @@ def get_args():
 
 @app.route('/real-time/trip-updates')
 def get_trip_updates():
-    trip_updates = db.session.query(TripUpdate).limit(100).all()
-    result = [tu.dict_format() for tu in trip_updates]
-    return jsonify(result)
+    engine = create_engine('mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt')
+
+    conn = engine.connect()
+    result = conn.execute(text('SELECT * FROM trip_updates'))
+
+    output = ''
+
+    for r in result:
+        output += str(r)
+
+    return output
 
 if __name__ == '__main__':
     args = get_args()
