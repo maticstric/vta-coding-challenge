@@ -359,7 +359,7 @@ def get_args():
     parser = ArgumentParser(description='VTA Coding Challenge')
     parser.add_argument('-f','--format', help='Format. Only JSON supported. JSON is default', default='json')
     parser.add_argument('-k','--key', help='API key. 59af72683221a1734f637eae7a7e8d9b is default', default='59af72683221a1734f637eae7a7e8d9b')
-    parser.add_argument('-v','--verbosity', help='Verbosity level. Only 0, 1, and 2 supported. Level 1 is default', default='0')
+    parser.add_argument('-v','--verbosity', help='Verbosity level. Only 0, 1, and 2 supported. Level 1 is default with a few custom messages. Level 2 shows all SQL commands being run', default='1')
     parser.add_argument('-r','--remote', help='Flag to use remote MySQL database hosted on Amazon RDS instead of default local SQLite database. Use this option to update the remote database so you can get up-to-date data from the endpoint', action='store_true')
     args = vars(parser.parse_args())
 
