@@ -8,12 +8,10 @@ from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Table, Column, Integer, String
 
-app = Flask(__name__)
-#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///gtfs.sqlite'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt'
-#app.config['SQLALCHEMY_ECHO'] = True
+VERBOSITY = 0
 
-db = SQLAlchemy(app)
+app = Flask(__name__)
+db = SQLAlchemy()
 
 class TripUpdate(db.Model):
     __tablename__ = 'trip_updates'
@@ -327,16 +325,20 @@ def update_stop_time_updates_table(data, old_ids):
 
 def parse_feed(data):
     delete_expired_records(data)
+    if VERBOSITY >= 1: print('Deleted expired records')
 
     old_trip_update_ids = [ v[0] for v in db.session.query(TripUpdate.id).all() ]
     old_stop_time_update_ids = [ v[0] for v in db.session.query(StopTimeUpdate.id).all() ]
 
-
     add_new_trip_updates(data, old_trip_update_ids)
+    if VERBOSITY >= 1: print('Added new entries to TripUpdate')
     update_trip_updates_table(data, old_trip_update_ids)
+    if VERBOSITY >= 1: print('Updated old entries in TripUpdate')
 
     add_new_stop_time_updates(data, old_stop_time_update_ids)
+    if VERBOSITY >= 1: print('Added new entries to StopTimeUpdate')
     update_stop_time_updates_table(data, old_stop_time_update_ids)
+    if VERBOSITY >= 1: print('Updated old entries in StopTimeUpdate')
 
 def clear_database():
     stmt = StopTimeUpdate.__table__.delete()
@@ -347,6 +349,16 @@ def clear_database():
 
     db.session.commit()
 
+def get_args():
+    parser = ArgumentParser(description='VTA Coding Challenge')
+    parser.add_argument('-f','--format', help='Format. Only JSON supported', default='json')
+    parser.add_argument('-k','--key', help='API key', default='59af72683221a1734f637eae7a7e8d9b')
+    parser.add_argument('-v','--verbosity', help='Verbosity level. Only 0, 1, and 2 supported', default='0')
+    parser.add_argument('-r','--remote', help='Flag to use remote MySQL database hosted on Amazon RDS instead of default local SQLite database', action='store_true')
+    args = vars(parser.parse_args())
+
+    return args
+
 @app.route('/real-time/trip-updates')
 def get_trip_updates():
     trip_updates = db.session.query(TripUpdate).limit(100).all()
@@ -354,20 +366,35 @@ def get_trip_updates():
     return jsonify(result)
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description='VTA Coding Challenge')
-    parser.add_argument('-f','--format', help='Format (only JSON supported)', default='json')
-    parser.add_argument('-k','--key', help='API key', default='59af72683221a1734f637eae7a7e8d9b')
-    args = vars(parser.parse_args())
+    args = get_args()
 
     format = args['format'].strip().lower()
     key = args['key'].strip()
+    verbosity = args['verbosity'].strip()
+    remote = args['remote']
 
     if format != 'json':
         sys.exit('Error: Only JSON format supported. Run again with "--format json".')
 
-    data = get_json_data(key, format)
+    if verbosity.isdigit():
+        VERBOSITY = int(args['verbosity'])
+
+    if VERBOSITY >= 2:
+        app.config['SQLALCHEMY_ECHO'] = True
+
+    if remote:
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt'
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vta-gtfs-rt.sqlite'
+
+
+    db.init_app(app)
 
     with app.app_context():
+
+        data = get_json_data(key, format)
+        if VERBOSITY >= 1: print('Got API result')
+
         db.create_all()
 
         parse_feed(data)
