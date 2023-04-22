@@ -158,17 +158,17 @@ def update_trip_updates_table(data, old_ids):
     # https://stackoverflow.com/questions/41870323/sqlalchemy-bulk-update-strategies/41882026#41882026
 
     # Create a temporary database
-    tmp = Table("tmp", db.metadata,
-        Column("id", String(64), primary_key=True),
-        Column("tripId", String(64)),
-        Column("startTime", String(64)),
-        Column("startDate", String(64)),
-        Column("scheduleRelationship", String(64)),
-        Column("routeId", String(64)),
-        Column("directionId", Integer),
-        Column("timestamp", String(64)),
-        Column("vehicleId", String(64)),
-        prefixes=["TEMPORARY"]
+    tmp = Table('tmp', db.metadata,
+        Column('id', String(64), primary_key=True),
+        Column('tripId', String(64)),
+        Column('startTime', String(64)),
+        Column('startDate', String(64)),
+        Column('scheduleRelationship', String(64)),
+        Column('routeId', String(64)),
+        Column('directionId', Integer),
+        Column('timestamp', String(64)),
+        Column('vehicleId', String(64)),
+        prefixes=['TEMPORARY']
     )
 
     tmp.create(bind=db.session.get_bind())
@@ -263,15 +263,15 @@ def update_stop_time_updates_table(data, old_ids):
     # https://stackoverflow.com/questions/41870323/sqlalchemy-bulk-update-strategies/41882026#41882026
 
     # Create a temporary database
-    tmp2 = Table("tmp2", db.metadata,
-        Column("id", String(64), primary_key=True),
-        Column("stopId", String(64)),
-        Column("stopSequence", db.Integer),
-        Column("arrivalTime", String(64)),
-        Column("departureTime", String(64)),
-        Column("scheduleRelationship", String(64)),
-        Column("tripUpdateId", String(64)),
-        prefixes=["TEMPORARY"]
+    tmp2 = Table('tmp2', db.metadata,
+        Column('id', String(64), primary_key=True),
+        Column('stopId', String(64)),
+        Column('stopSequence', db.Integer),
+        Column('arrivalTime', String(64)),
+        Column('departureTime', String(64)),
+        Column('scheduleRelationship', String(64)),
+        Column('tripUpdateId', String(64)),
+        prefixes=['TEMPORARY']
     )
 
     tmp2.create(bind=db.session.get_bind())
@@ -357,10 +357,10 @@ def clear_database():
 
 def get_args():
     parser = ArgumentParser(description='VTA Coding Challenge')
-    parser.add_argument('-f','--format', help='Format. Only JSON supported', default='json')
-    parser.add_argument('-k','--key', help='API key', default='59af72683221a1734f637eae7a7e8d9b')
-    parser.add_argument('-v','--verbosity', help='Verbosity level. Only 0, 1, and 2 supported', default='0')
-    parser.add_argument('-r','--remote', help='Flag to use remote MySQL database hosted on Amazon RDS instead of default local SQLite database', action='store_true')
+    parser.add_argument('-f','--format', help='Format. Only JSON supported. JSON is default', default='json')
+    parser.add_argument('-k','--key', help='API key. 59af72683221a1734f637eae7a7e8d9b is default', default='59af72683221a1734f637eae7a7e8d9b')
+    parser.add_argument('-v','--verbosity', help='Verbosity level. Only 0, 1, and 2 supported. Level 1 is default', default='0')
+    parser.add_argument('-r','--remote', help='Flag to use remote MySQL database hosted on Amazon RDS instead of default local SQLite database. Use this option to update the remote database so you can get up-to-date data from the endpoint', action='store_true')
     args = vars(parser.parse_args())
 
     return args
