@@ -144,9 +144,10 @@ def add_new_trip_updates(data, old_ids):
 
             to_add.append(mapping)
 
-    # Insert
-    db.session.execute(TripUpdate.__table__.insert().values(to_add))
-    db.session.commit()
+    if len(to_add) != 0:
+        # Insert
+        db.session.execute(TripUpdate.__table__.insert().values(to_add))
+        db.session.commit()
 
 def update_trip_updates_table(data, old_ids):
     # Optimized update idea from here:
@@ -177,7 +178,7 @@ def update_trip_updates_table(data, old_ids):
             mapping = {
                 'id': trip_update['id'],
                 'tripId': trip_update['tripUpdate']['trip']['tripId'],
-                'startTime': str(trip_update['tripUpdate']['trip']['startTime']) + 'asdf',
+                'startTime': str(trip_update['tripUpdate']['trip']['startTime']),
                 'startDate': trip_update['tripUpdate']['trip']['startDate'],
                 'scheduleRelationship': trip_update['tripUpdate']['trip']['scheduleRelationship'],
                 'routeId': trip_update['tripUpdate']['trip']['routeId'],
@@ -248,9 +249,10 @@ def add_new_stop_time_updates(data, old_ids):
 
                     to_add.append(mapping)
 
-    # Insert
-    db.session.execute(StopTimeUpdate.__table__.insert().values(to_add))
-    db.session.commit()
+    if len(to_add) != 0:
+        # Insert
+        db.session.execute(StopTimeUpdate.__table__.insert().values(to_add))
+        db.session.commit()
 
 def update_stop_time_updates_table(data, old_ids):
     # Optimized update idea from here:
