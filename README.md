@@ -4,7 +4,9 @@ My source code for the VTA coding challenge ([https://github.com/vta/coding-chal
 
 When you run the script, a `vta-gtfs-rt.sqlite` file will be put into an `./instance` directory containing the data from the Swiftly API.
 
-I deployed this project using the serverless framework. The API endpoint I created can be found here: [https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates](https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates). Note that this endpoint accesses a remote MySQL Amazon RDS database (not the local SQLite database) which can be updated by the script with the `-r` flag. Read the "Usage" section below to learn more about `-r` and other arguments.
+I deployed this project using the serverless framework. The API endpoint I created can be found here: [https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates](https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates). By default, it will return the first 100 entries in the database. However, you can also add a `num_entries` query to the URL to get any number you wish (e.g. [https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates?num_entries=50](https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates?num_entries=50)).
+
+_Note that this endpoint accesses a remote MySQL Amazon RDS database (not the local SQLite database) which can be updated by the script with the `-r` flag._ Read the "Usage" section below to learn more about `-r` and other arguments.
 
 If you have any questions or problems running the program email me (matic@likar.me) and I'll respond as soon as possible! I put a lot of work into the project and it works on my laptop so it would be a shame if anything went wrong.
 
