@@ -4,10 +4,13 @@ import time
 
 from argparse import ArgumentParser
 import requests
-from flask import Flask, jsonify
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Table, Column, Integer, String
 from sqlalchemy import create_engine, text
+
+from sqlalchemy.orm import sessionmaker
+from flask import request
 
 import pymysql
 pymysql.install_as_MySQLdb()
@@ -49,15 +52,6 @@ class TripUpdate(db.Model):
         d['tripUpdate']['trip']['scheduleRelationship'] = self.schedule_relationship
         d['tripUpdate']['trip']['routeId'] = self.route_id
         d['tripUpdate']['trip']['directionId'] = self.direction_id
-
-        records = db.session.query(StopTimeUpdate).all()
-
-        for record in records:
-            if record.trip_update_id == self.id:
-                if 'stopTimeUpdate' not in d['tripUpdate']:
-                    d['tripUpdate']['stopTimeUpdate'] = []
-
-                d['tripUpdate']['stopTimeUpdate'].append(record.dict_format())
 
         if self.vehicle_id != None:
             d['tripUpdate']['vehicle'] = { 'id': self.vehicle_id }
@@ -369,15 +363,31 @@ def get_args():
 def get_trip_updates():
     engine = create_engine('mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt')
 
-    conn = engine.connect()
-    result = conn.execute(text('SELECT * FROM trip_updates'))
+    Session = sessionmaker(engine)
 
-    output = ''
+    num_entries = request.args.get('num_entries')
+    if num_entries == None: num_entries = 100 # Default to 100
 
-    for r in result:
-        output += str(r)
+    with Session() as session:
+        output = []
 
-    return output
+        trip_updates = session.query(TripUpdate).limit(num_entries).all()
+        stop_time_updates = session.query(StopTimeUpdate).all()
+
+        for trip_update in trip_updates:
+            d = trip_update.dict_format()
+
+            related_stu = [ stu for stu in stop_time_updates if stu.trip_update_id == trip_update.id ]
+
+            if len(related_stu) > 0: d['tripUpdate']['stopTimeUpdate'] = []
+
+            for stu in related_stu:
+                d['tripUpdate']['stopTimeUpdate'].append(stu.dict_format())
+
+            output.append(d)
+
+        return output
+
 
 if __name__ == '__main__':
     args = get_args()
