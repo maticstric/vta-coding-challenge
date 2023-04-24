@@ -358,21 +358,33 @@ def update_stop_time_updates_table(data, old_ids):
     db.session.commit()
 
 def parse_feed(data):
+    if VERBOSITY >= 1: print('Deleting expired records...', end=' ', flush=True)
+    start_time = time.time()
     delete_expired_records(data)
-    if VERBOSITY >= 1: print('Deleted expired records')
+    if VERBOSITY >= 1: print('DONE (in ' + str(round(time.time() - start_time, 4)) + 's)')
 
     old_trip_update_ids = [ v[0] for v in db.session.query(TripUpdate.id).all() ]
     old_stop_time_update_ids = [ v[0] for v in db.session.query(StopTimeUpdate.id).all() ]
 
+    if VERBOSITY >= 1: print('Adding new entries to TripUpdate...', end=' ', flush=True)
+    start_time = time.time()
     add_new_trip_updates(data, old_trip_update_ids)
-    if VERBOSITY >= 1: print('Added new entries to TripUpdate')
-    update_trip_updates_table(data, old_trip_update_ids)
-    if VERBOSITY >= 1: print('Updated old entries in TripUpdate')
+    if VERBOSITY >= 1: print('DONE (in ' + str(round(time.time() - start_time, 4)) + 's)')
 
+    if VERBOSITY >= 1: print('Updating old entries in TripUpdate...', end=' ', flush=True)
+    start_time = time.time()
+    update_trip_updates_table(data, old_trip_update_ids)
+    if VERBOSITY >= 1: print('DONE (in ' + str(round(time.time() - start_time, 4)) + 's)')
+
+    if VERBOSITY >= 1: print('Adding new entries to StopTimeUpdate...', end=' ', flush=True)
+    start_time = time.time()
     add_new_stop_time_updates(data, old_stop_time_update_ids)
-    if VERBOSITY >= 1: print('Added new entries to StopTimeUpdate')
+    if VERBOSITY >= 1: print('DONE (in ' + str(round(time.time() - start_time, 4)) + 's)')
+
+    if VERBOSITY >= 1: print('Updating old entries in StopTimeUpdate...', end=' ', flush=True)
+    start_time = time.time()
     update_stop_time_updates_table(data, old_stop_time_update_ids)
-    if VERBOSITY >= 1: print('Updated old entries in StopTimeUpdate')
+    if VERBOSITY >= 1: print('DONE (in ' + str(round(time.time() - start_time, 4)) + 's)')
 
 def clear_database():
     stmt = StopTimeUpdate.__table__.delete()
@@ -443,7 +455,6 @@ if __name__ == '__main__':
         app.config['SQLALCHEMY_ECHO'] = True
 
     if remote:
-        #app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt'
         app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta'
     else:
         app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vta-gtfs-rt.sqlite'
@@ -452,8 +463,10 @@ if __name__ == '__main__':
     db.init_app(app)
 
     with app.app_context():
+        if VERBOSITY >= 1: print('Getting API result...', end=' ', flush=True)
+        start_time = time.time()
         data = get_json_data(key, format)
-        if VERBOSITY >= 1: print('Got API result')
+        if VERBOSITY >= 1: print('DONE (in ' + str(round(time.time() - start_time, 4)) + 's)')
 
         db.create_all()
 
