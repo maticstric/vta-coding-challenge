@@ -8,9 +8,7 @@ from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Table, Column, Integer, String
 from sqlalchemy import create_engine, text
-
 from sqlalchemy.orm import sessionmaker
-from flask import request
 
 import pymysql
 pymysql.install_as_MySQLdb()
@@ -72,6 +70,8 @@ class StopTimeUpdate(db.Model):
     stop_sequence = db.Column(db.Integer)
     arrival_time = db.Column(db.String(64))
     departure_time = db.Column(db.String(64))
+    arrival_uncertainty = db.Column(db.String(64))
+    departure_uncertainty = db.Column(db.String(64))
     schedule_relationship = db.Column(db.String(64))
 
     trip_update_id = db.Column(db.String(64), db.ForeignKey('trip_updates.id'))
@@ -89,6 +89,12 @@ class StopTimeUpdate(db.Model):
 
         if self.departure_time:
             d['departure'] = { 'time': self.departure_time }
+
+        if self.arrival_uncertainty:
+            d['arrival'] = { 'uncertainty': self.arrival_uncertainty }
+
+        if self.departure_uncertainty:
+            d['departure'] = { 'uncertainty': self.departure_uncertainty }
 
         d['scheduleRelationship'] = self.schedule_relationship
 
@@ -152,7 +158,7 @@ def update_trip_updates_table(data, old_ids):
     # https://stackoverflow.com/questions/41870323/sqlalchemy-bulk-update-strategies/41882026#41882026
 
     # Create a temporary database
-    tmp = Table('tmp', db.metadata,
+    tmp_tu = Table('tmp_tu', db.metadata,
         Column('id', String(64), primary_key=True),
         Column('tripId', String(64)),
         Column('startTime', String(64)),
@@ -165,7 +171,7 @@ def update_trip_updates_table(data, old_ids):
         prefixes=['TEMPORARY']
     )
 
-    tmp.create(bind=db.session.get_bind())
+    tmp_tu.create(bind=db.session.get_bind())
     db.session.commit()
 
     to_update = []
@@ -194,22 +200,22 @@ def update_trip_updates_table(data, old_ids):
 
     # Update the TripUpdate table according to the temporary table
     if len(to_update) != 0:
-        db.session.execute(tmp.insert().values(to_update))
+        db.session.execute(tmp_tu.insert().values(to_update))
 
         db.session.execute(TripUpdate.__table__
                                      .update()
                                      .values(
-                                         id=tmp.c.id,
-                                         trip_id=tmp.c.tripId,
-                                         start_time=tmp.c.startTime,
-                                         start_date=tmp.c.startDate,
-                                         schedule_relationship=tmp.c.scheduleRelationship,
-                                         route_id=tmp.c.routeId,
-                                         direction_id=tmp.c.directionId,
-                                         timestamp=tmp.c.timestamp,
-                                         vehicle_id=tmp.c.vehicleId
+                                         id=tmp_tu.c.id,
+                                         trip_id=tmp_tu.c.tripId,
+                                         start_time=tmp_tu.c.startTime,
+                                         start_date=tmp_tu.c.startDate,
+                                         schedule_relationship=tmp_tu.c.scheduleRelationship,
+                                         route_id=tmp_tu.c.routeId,
+                                         direction_id=tmp_tu.c.directionId,
+                                         timestamp=tmp_tu.c.timestamp,
+                                         vehicle_id=tmp_tu.c.vehicleId
                                      )
-                                     .where(TripUpdate.__table__.c.id == tmp.c.id))
+                                     .where(TripUpdate.__table__.c.id == tmp_tu.c.id))
 
     db.session.commit()
 
@@ -232,18 +238,30 @@ def add_new_stop_time_updates(data, old_ids):
                         'trip_update_id': trip_update['id']
                     }
 
-                    # The arrival and departure times are optional (for CANCELED)
+                    # The arrival and departure times/uncertainties are optional (for CANCELED)
                     # so we need to check if they exist
 
                     if 'arrival' in stop_time_update:
                         mapping['arrival_time'] = stop_time_update['arrival']['time']
+
+                        if 'uncertainty' in stop_time_update['arrival']:
+                            mapping['arrival_uncertainty'] = stop_time_update['arrival']['uncertainty']
+                        else:
+                            mapping['arrival_uncertainty'] = None
                     else:
                         mapping['arrival_time'] = None
+                        mapping['arrival_uncertainty'] = None
 
                     if 'departure' in stop_time_update:
                         mapping['departure_time'] = stop_time_update['departure']['time']
+
+                        if 'uncertainty' in stop_time_update['departure']:
+                            mapping['departure_uncertainty'] = stop_time_update['departure']['uncertainty']
+                        else:
+                            mapping['departure_uncertainty'] = None
                     else:
                         mapping['departure_time'] = None
+                        mapping['departure_uncertainty'] = None
 
                     to_add.append(mapping)
 
@@ -257,18 +275,20 @@ def update_stop_time_updates_table(data, old_ids):
     # https://stackoverflow.com/questions/41870323/sqlalchemy-bulk-update-strategies/41882026#41882026
 
     # Create a temporary database
-    tmp2 = Table('tmp2', db.metadata,
+    tmp_stu = Table('tmp_stu', db.metadata,
         Column('id', String(64), primary_key=True),
         Column('stopId', String(64)),
         Column('stopSequence', db.Integer),
         Column('arrivalTime', String(64)),
         Column('departureTime', String(64)),
+        Column('arrivalUncertainty', String(64)),
+        Column('departureUncertainty', String(64)),
         Column('scheduleRelationship', String(64)),
         Column('tripUpdateId', String(64)),
         prefixes=['TEMPORARY']
     )
 
-    tmp2.create(bind=db.session.get_bind())
+    tmp_stu.create(bind=db.session.get_bind())
     db.session.commit()
 
     to_update = []
@@ -289,37 +309,51 @@ def update_stop_time_updates_table(data, old_ids):
                         'tripUpdateId': trip_update['id']
                     }
 
-                    # The arrival and departure times are optional (for CANCELED)
+                    # The arrival and departure times/uncertainties are optional (for CANCELED)
                     # so we need to check if they exist
 
                     if 'arrival' in stop_time_update:
                         mapping['arrivalTime'] = stop_time_update['arrival']['time']
+
+                        if 'uncertainty' in stop_time_update['arrival']:
+                            mapping['arrivalUncertainty'] = stop_time_update['arrival']['uncertainty']
+                        else:
+                            mapping['arrivalUncertainty'] = None
                     else:
                         mapping['arrivalTime'] = None
+                        mapping['arrivalUncertainty'] = None
 
                     if 'departure' in stop_time_update:
                         mapping['departureTime'] = stop_time_update['departure']['time']
+
+                        if 'uncertainty' in stop_time_update['departure']:
+                            mapping['departureUncertainty'] = stop_time_update['departure']['uncertainty']
+                        else:
+                            mapping['departureUncertainty'] = None
                     else:
                         mapping['departureTime'] = None
+                        mapping['departureUncertainty'] = None
 
                     to_update.append(mapping)
 
     # Update the StopTimeUpdate table according to the temporary table
     if len(to_update) != 0:
-        db.session.execute(tmp2.insert().values(to_update))
+        db.session.execute(tmp_stu.insert().values(to_update))
 
         db.session.execute(StopTimeUpdate.__table__
                                          .update()
                                          .values(
-                                             id=tmp2.c.id,
-                                             stop_id=tmp2.c.stopId,
-                                             stop_sequence=tmp2.c.stopSequence,
-                                             schedule_relationship=tmp2.c.scheduleRelationship,
-                                             trip_update_id=tmp2.c.tripUpdateId,
-                                             arrival_time=tmp2.c.arrivalTime,
-                                             departure_time=tmp2.c.departureTime
+                                             id=tmp_stu.c.id,
+                                             stop_id=tmp_stu.c.stopId,
+                                             stop_sequence=tmp_stu.c.stopSequence,
+                                             schedule_relationship=tmp_stu.c.scheduleRelationship,
+                                             trip_update_id=tmp_stu.c.tripUpdateId,
+                                             arrival_time=tmp_stu.c.arrivalTime,
+                                             departure_time=tmp_stu.c.departureTime,
+                                             arrival_uncertainty=tmp_stu.c.arrivalUncertainty,
+                                             departure_uncertainty=tmp_stu.c.departureUncertainty
                                          )
-                                         .where(StopTimeUpdate.__table__.c.id == tmp2.c.id))
+                                         .where(StopTimeUpdate.__table__.c.id == tmp_stu.c.id))
 
     db.session.commit()
 
@@ -347,6 +381,8 @@ def clear_database():
     stmt = TripUpdate.__table__.delete()
     db.session.execute(stmt)
 
+    db.drop_all(bind=db.session.get_bind())
+
     db.session.commit()
 
 def get_args():
@@ -361,7 +397,7 @@ def get_args():
 
 @app.route('/real-time/trip-updates')
 def get_trip_updates():
-    engine = create_engine('mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt')
+    engine = create_engine('mysql+mysqldb://admin:adminadmin@vta.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta')
 
     Session = sessionmaker(engine)
 
@@ -407,7 +443,8 @@ if __name__ == '__main__':
         app.config['SQLALCHEMY_ECHO'] = True
 
     if remote:
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt'
+        #app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta-gtfs-rt.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta_gtfs_rt'
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqldb://admin:adminadmin@vta.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta'
     else:
         app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vta-gtfs-rt.sqlite'
 
@@ -415,7 +452,6 @@ if __name__ == '__main__':
     db.init_app(app)
 
     with app.app_context():
-
         data = get_json_data(key, format)
         if VERBOSITY >= 1: print('Got API result')
 
