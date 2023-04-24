@@ -26,7 +26,7 @@ I believe no additional libraries are needed since the rest which are used shoul
 
 ## Usage
 ```
-usage: main.py [-h] [-f FORMAT] [-k KEY] [-v VERBOSITY] [-r]
+usage: vta.py [-h] [-f FORMAT] [-k KEY] [-v VERBOSITY] [-r]
 
 VTA Coding Challenge
 
