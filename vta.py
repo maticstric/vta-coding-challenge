@@ -407,6 +407,10 @@ def get_args():
 
     return args
 
+@app.route('/')
+def root():
+    return 'Hello! Visit <a href="https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates">https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates</a> to see the Trip Updates retrived from the database!'
+
 @app.route('/real-time/trip-updates')
 def get_trip_updates():
     engine = create_engine('mysql+mysqldb://admin:adminadmin@vta.cllzuixyffer.us-east-2.rds.amazonaws.com:3306/vta')
