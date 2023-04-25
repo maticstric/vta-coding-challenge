@@ -4,9 +4,11 @@ My source code for the VTA coding challenge ([https://github.com/vta/coding-chal
 
 When you run the script, a `vta-gtfs-rt.sqlite` file will be put into an `./instance` directory containing the data from the Swiftly API.
 
-I deployed this project using the serverless framework. The API endpoint I created can be found here: [https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates](https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates). By default, it will return the first 100 entries in the database. However, you can also add a `num_entries` query to the URL to get any number you wish (e.g. [https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates?num_entries=50](https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates?num_entries=50)).
+I deployed this project using the serverless framework. The API endpoint I created can be found here: [https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates](https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates). By default, it will return the first 100 entries in the database. However, you can also add a `num_entries` query to the URL to get any number you wish (e.g. [https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates?num_entries=50](https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates?num_entries=50)). The serverless deployment code is presented [here](https://github.com/maticstric/vta-coding-challenge-serverless).
 
 _Note that this endpoint accesses a remote MySQL Amazon RDS database (not the local SQLite database) which can be updated by the script with the `-r` flag._ Read the "Usage" section below to learn more about `-r` and other arguments.
+
+I've also created a few unit tests in the `test_vta.py` file. To run the tests, just run `python3 test_vta.py`.
 
 If you have any questions or problems running the program email me (matic@likar.me) and I'll respond as soon as possible! I put a lot of work into the project and it works on my laptop so it would be a shame if anything went wrong.
 
@@ -55,3 +57,4 @@ optional arguments:
 - Since I also wanted to deploy this project, I switched to using a remote database. I chose to use a MySQL Amazon RDS instance
 - After switching to a remote database, I realized the inserts and updates as I wrote them earlier were far too slow, taking almost 30 minutes to complete. After _a lot_ of optimization trial and error, I settled on a strategy outlined in [this Stack Overflow answer](https://stackoverflow.com/questions/41870323/sqlalchemy-bulk-update-strategies/41882026#41882026). This reduced the total time to insert and update down to only a few seconds at the cost of making the code slightly less readable. I remedied this with many comments
 - I then finally deployed this project using the serverless framework [here](https://a27y33tfw0.execute-api.us-east-1.amazonaws.com/real-time/trip-updates)
+- Lastly, I created a few unit tests in the `test_vta.py` file using the `unitttest` library
