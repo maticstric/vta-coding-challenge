@@ -10,6 +10,8 @@ _Note that this endpoint accesses a remote MySQL Amazon RDS database (not the lo
 
 I've also created a few unit tests in the `test_vta.py` file. To run the tests, just run `python3 test_vta.py`.
 
+I belive my program satisfies all the requirements stated in the instructions, including all the extra credit parts.
+
 If you have any questions or problems running the program email me (matic@likar.me) and I'll respond as soon as possible! I put a lot of work into the project and it works on my laptop so it would be a shame if anything went wrong.
 
 ## Libraries
