@@ -1,3 +1,5 @@
+THE AWS SERVICES USED FOR RUNNING THIS HAVE SINCE BEEN SHUT DOWN DUE TO COSTS.
+
 # VTA Coding Challenge
 
 My source code for the VTA coding challenge ([https://github.com/vta/coding-challenge#instructions](https://github.com/vta/coding-challenge#instructions)).
